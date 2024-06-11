@@ -12,7 +12,7 @@ The wrapped `eig` function also includes a custom vjp rule so that gradients wit
 import jax
 import jeig.eig as jeig
 
-matrix = jax.random.normal(jax.random.PRNGKey(0), (8, 100, 100))
+matrix = jax.random.normal(jax.random.PRNGKey(0), (8, 320, 320))
 
 jeig.BACKEND_EIG = jeig.JAX
 %timeit jeig.eig(matrix)
