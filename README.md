@@ -1,4 +1,7 @@
-# jeig - Various eigendecomposition implementations wrapped for jax.
+# jeig - Eigendecompositions wrapped for jax
+`v0.0.0`
+
+## Overview
 
 This package wraps eigendecompositions as provided by jax, numpy, scipy, and torch for use with jax. Depending upon your system and your versions of these packages, you may observe significant speed differences.
 
