@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 import jax
 import jax.numpy as jnp
 import numpy as onp
-import scipy
+import scipy  # type: ignore[import-untyped]
 import torch
 
 try:
@@ -160,9 +160,10 @@ def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
     def _eig_fn(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         with jax.default_device(jax.devices("cpu")[0]):
-            return jax.jit(jnp.linalg.eig)(matrix)
+            eigval, eigvec = jax.jit(jnp.linalg.eig)(matrix)
+            return jnp.asarray(eigval), jnp.asarray(eigvec)
 
-    return jax.pure_callback(
+    eigval, eigvec = jax.pure_callback(
         _eig_fn,
         (
             jnp.ones(matrix.shape[:-1], dtype=complex),  # Eigenvalues
@@ -171,11 +172,12 @@ def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         matrix.astype(complex),
         vectorized=True,
     )
+    return jnp.asarray(eigval), jnp.asarray(eigvec)
 
 
 def _eig_numpy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `numpy.linalg.eig`."""
-    return jax.pure_callback(
+    eigval, eigvec = jax.pure_callback(
         onp.linalg.eig,
         (
             jnp.ones(matrix.shape[:-1], dtype=complex),  # Eigenvalues
@@ -184,13 +186,14 @@ def _eig_numpy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         matrix.astype(complex),
         vectorized=True,
     )
+    return jnp.asarray(eigval), jnp.asarray(eigvec)
 
 
 def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `scipy.linalg.eig`."""
 
     def _eig_fn(m: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        return jax.pure_callback(
+        eigval, eigvec = jax.pure_callback(
             scipy.linalg.eig,
             (
                 jnp.ones(m.shape[:-1], dtype=complex),  # Eigenvalues
@@ -199,6 +202,7 @@ def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
             m.astype(complex),
             vectorized=False,
         )
+        return jnp.asarray(eigval), jnp.asarray(eigvec)
 
     batch_shape = matrix.shape[:-2]
     matrix = jnp.reshape(matrix, (-1,) + matrix.shape[-2:])
@@ -238,8 +242,11 @@ def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 def _eig_torch_parallelized(x: torch.Tensor) -> List[Tuple[torch.Tensor, torch.Tensor]]:
     """Parallelized eigendecomposition using torch."""
     # See https://github.com/google/jax/issues/10180#issuecomment-1092098074
-    futures = [torch.jit._fork(torch.linalg.eig, x[i]) for i in range(x.shape[0])]
-    return [torch.jit._wait(fut) for fut in futures]
+    futures = [
+        torch.jit.fork(torch.linalg.eig, x[i])  # type: ignore[no-untyped-call]
+        for i in range(x.shape[0])
+    ]
+    return [torch.jit.wait(fut) for fut in futures]  # type: ignore[no-untyped-call]
 
 
 EIG_FNS = {
