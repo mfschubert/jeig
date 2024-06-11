@@ -31,7 +31,6 @@ EPS_EIG = 1e-6
 def eig(
     matrix: jnp.ndarray,
     eps: float = EPS_EIG,
-    backend: Optional[str] = None,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Computes the eigendecomposition of `matrix`.
 
@@ -43,24 +42,20 @@ def eig(
     Args:
         matrix: The matrix for which eigenvalues and eigenvectors are sought.
         eps: Parameter which determines the degree of broadening.
-        backend: Specifies the backend to be used for the eigendecomposition. If
-            `None`, the backend specified by module-level constant `BACKEND_EIG` is
-            used.
 
     Returns:
         The eigenvalues and eigenvectors.
     """
     del eps
-    return _eig(matrix, backend=backend)
+    return _eig(matrix)
 
 
 def _eig_fwd(
     matrix: jnp.ndarray,
     eps: float,
-    backend: Optional[str] = None,
 ) -> Tuple[Tuple[jnp.ndarray, jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray, float]]:
     """Implements the forward calculation for `eig`."""
-    eigenvalues, eigenvectors = _eig(matrix, backend=backend)
+    eigenvalues, eigenvectors = _eig(matrix)
     return (eigenvalues, eigenvectors), (eigenvalues, eigenvectors, eps)
 
 

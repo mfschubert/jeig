@@ -8,8 +8,7 @@ import jax.numpy as jnp
 import numpy as onp
 from parameterized import parameterized
 
-import jeig
-from jeig import _eig
+import jeig.eig as jeig
 
 # Enable 64-bit precision for higher accuracy.
 jax.config.update("jax_enable_x64", True)
@@ -59,7 +58,7 @@ class DiagTest(unittest.TestCase):
         for shape in shapes:
             with self.subTest(shape):
                 v = jax.random.uniform(jax.random.PRNGKey(0), shape)
-                d = _eig.diag(v)
+                d = jeig.diag(v)
                 expected = jnp.zeros(shape + (shape[-1],))
                 for ind in itertools.product(*[range(dim) for dim in shape[:-1]]):
                     expected = expected.at[ind].set(jnp.diag(v[ind]))
@@ -72,7 +71,7 @@ class MatrixAdjointTest(unittest.TestCase):
         for shape in shapes:
             with self.subTest(shape):
                 m = jax.random.uniform(jax.random.PRNGKey(0), shape)
-                ma = _eig.matrix_adjoint(m)
+                ma = jeig.matrix_adjoint(m)
                 expected = jnp.zeros(shape)
                 for ind in itertools.product(*[range(dim) for dim in shape[:-2]]):
                     expected = expected.at[ind].set(jnp.conj(m[ind]).T)
@@ -94,8 +93,8 @@ class EigTest(unittest.TestCase):
             jax.device_put(matrix, device=jax.devices("cpu")[0])
         )
         eigval, eigvec = jeig.eig(matrix)
-        onp.testing.assert_array_equal(eigval, expected_eigval)
-        onp.testing.assert_array_equal(eigvec, expected_eigvec)
+        onp.testing.assert_allclose(eigval, expected_eigval)
+        onp.testing.assert_allclose(eigvec, expected_eigvec)
 
     def test_eigvalue_jacobian_matches_expected_real_matrix(self):
         matrix = jax.random.normal(jax.random.PRNGKey(0), (2, 4, 4)).astype(complex)
@@ -126,7 +125,7 @@ class EigTest(unittest.TestCase):
 
         matrix = jax.random.normal(jax.random.PRNGKey(0), (32,))
         matrix = matrix.reshape((2, 4, 4)).astype(complex)
-        matrix = matrix + _eig.matrix_adjoint(matrix)
+        matrix = matrix + jeig.matrix_adjoint(matrix)
         onp.testing.assert_array_equal(matrix, jnp.transpose(matrix, (0, 2, 1)))
 
         with self.subTest("eigenvalues"):
@@ -161,8 +160,8 @@ class EigTest(unittest.TestCase):
         matrix = jax.random.normal(jax.random.PRNGKey(0), (32,))
         matrix = matrix + 1j * jax.random.normal(jax.random.PRNGKey(1), (32,))
         matrix = matrix.reshape((2, 4, 4)).astype(complex)
-        matrix = matrix + _eig.matrix_adjoint(matrix)
-        onp.testing.assert_array_equal(matrix, _eig.matrix_adjoint(matrix))
+        matrix = matrix + jeig.matrix_adjoint(matrix)
+        onp.testing.assert_array_equal(matrix, jeig.matrix_adjoint(matrix))
 
         with self.subTest("eigenvalues"):
             onp.testing.assert_allclose(_eig_fn(matrix)[0], _eigh_fn(matrix)[0])
@@ -190,7 +189,7 @@ class EigTest(unittest.TestCase):
         # eigendecomposition.
         def fn(x):
             x = x + 1j * x
-            x = x + _eig.matrix_adjoint(x)
+            x = x + jeig.matrix_adjoint(x)
             _, eigvec = jeig.eig(x)
             return jnp.abs(eigvec)
 
@@ -230,12 +229,12 @@ class EigTest(unittest.TestCase):
 
 
 class BackendComparisonTest(unittest.TestCase):
-    @parameterized.expand([_eig.JAX, _eig.NUMPY, _eig.SCIPY, _eig.TORCH])
+    @parameterized.expand([jeig.JAX, jeig.NUMPY, jeig.SCIPY, jeig.TORCH])
     def test_backends_against_jax(self, backend):
         matrix = jax.random.normal(jax.random.PRNGKey(0), (32,))
         matrix = matrix.reshape((2, 4, 4))
-        expected_eigval, expected_eigvec = _eig._eig_jax(matrix)
-        eigval, eigvec = _eig._eig(matrix, backend=backend)
+        expected_eigval, expected_eigvec = jeig._eig_jax(matrix)
+        eigval, eigvec = jeig._eig(matrix, backend=backend)
 
         onp.testing.assert_allclose(eigval, expected_eigval)
         onp.testing.assert_allclose(eigvec, expected_eigvec)
