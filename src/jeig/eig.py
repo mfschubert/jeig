@@ -104,7 +104,7 @@ def _eig_bwd(
 
     # Return `grad_matrix`, and `None` for the gradient with respect to `eps` and
     # `backend`.
-    return grad_matrix, None, None
+    return grad_matrix, None
 
 
 eig.defvjp(_eig_fwd, _eig_bwd)
