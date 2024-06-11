@@ -33,6 +33,7 @@ dev = [
     "bump-my-version",
     "darglint",
     "jeig[tests]",
+    "mypy",
     "pre-commit",
 ]
 
