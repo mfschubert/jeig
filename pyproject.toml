@@ -1,0 +1,61 @@
+[project]
+
+name = "jeig"
+version = "v0.0.0"
+description = "Various eigendecomposition implementations wrapped for jax."
+keywords = ["jax", "eigendecomposition", "eig", "torch", "scipy", "numpy"]
+readme = "README.md"
+requires-python = ">=3.7"
+license = {file = "LICENSE"}
+
+authors = [
+    {name = "Martin Schubert", email = "mfschubert@gmail.com"},
+]
+maintainers = [
+    {name = "Martin Schubert", email = "mfschubert@gmail.com"},
+]
+
+dependencies = [
+    "jax",
+    "jaxlib",
+    "numpy",
+    "scipy",
+    "torch",
+]
+
+[project.optional-dependencies]
+tests = [
+    "parameterized",
+    "pytest",
+    "pytest-cov",
+]
+dev = [
+    "bump-my-version",
+    "darglint",
+    "jeig[tests]",
+    "pre-commit",
+]
+
+[tool.setuptools.package-data]
+"jeig" = ["py.typed"]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[tool.isort]
+multi_line_output = 3
+line_length = 88
+include_trailing_comma = true
+
+[tool.pydocstyle]
+inherit = false
+convention = "google"
