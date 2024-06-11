@@ -106,8 +106,7 @@ def _eig_bwd(
     # where gradients are with respect to complex parameters.
     grad_matrix = jnp.conj(grad_matrix)
 
-    # Return `grad_matrix`, and `None` for the gradient with respect to `eps` and
-    # `backend`.
+    # Return `grad_matrix`, and `None` for the gradient with respect to `eps`.
     return grad_matrix, None
 
 
