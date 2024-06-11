@@ -27,7 +27,7 @@ jobs:
           pip install pre-commit
           pre-commit run -a
 
-  validate-docstrings:
+validate-types-and-docstrings:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -45,7 +45,11 @@ jobs:
             python -m pip install --upgrade pip
             pip install ".[tests,dev]"
 
-      - name: Validate docstrings
+      - name: mypy type validation
+        run: |
+          mypy src
+
+      - name: darglint docstring validation
         run: |
           darglint src --strictness=short --ignore-raise=ValueError
 
