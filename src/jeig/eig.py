@@ -1,6 +1,7 @@
 """Various implementations of `eig` wrapped for use with jax."""
 
 import multiprocessing as mp
+import warnings
 from typing import List, Optional, Tuple
 
 import jax
@@ -9,8 +10,11 @@ import numpy as onp
 import scipy
 import torch
 
-torch.set_num_threads(1)
-torch.set_num_interop_threads(mp.cpu_count())
+try:
+    torch.set_num_threads(1)
+    torch.set_num_interop_threads(mp.cpu_count())
+except RuntimeError as exc:
+    warnings.warn(str(exc))
 
 
 JAX = "jax"

@@ -1,5 +1,5 @@
 # jeig - Eigendecompositions wrapped for jax
-`v0.0.0`
+`v0.0.1`
 
 ## Overview
 
@@ -8,6 +8,13 @@ This package wraps eigendecompositions as provided by jax, numpy, scipy, and tor
 The wrapped `eig` function also includes a custom vjp rule so that gradients with respect to eigenvalues and eigenvectors can be computed.
 
 ![Speed comparison](/docs/speed.png)
+
+## Install
+jeig can be installed via pip,
+```
+pip install jeig
+```
+This will also install torch. If you only need torch for use with jeig, then the CPU-only version is sufficient and you may wish to install manually as described in the [pytorch docs](https://pytorch.org/get-started/locally/).
 
 ## Example usage
 
