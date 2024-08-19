@@ -18,27 +18,27 @@ This will also install torch. If you only need torch for use with jeig, then the
 
 ```python
 import jax
-import jeig.eig as jeig
+import jeig
 
 matrix = jax.random.normal(jax.random.PRNGKey(0), (8, 320, 320))
 
-jeig.BACKEND_EIG = jeig.JAX
+jeig.set_backend("jax")
 %timeit jeig.eig(matrix)
 
-jeig.BACKEND_EIG = jeig.NUMPY
+jeig.set_backend("numpy")
 %timeit jeig.eig(matrix)
 
-jeig.BACKEND_EIG = jeig.SCIPY
+jeig.set_backend("scipy")
 %timeit jeig.eig(matrix)
 
-jeig.BACKEND_EIG = jeig.TORCH
+jeig.set_backend("torch")
 %timeit jeig.eig(matrix)
 ```
 ```
-376 ms ± 11.4 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-689 ms ± 11.2 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-414 ms ± 19 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-136 ms ± 4 ms per loop (mean ± std. dev. of 7 runs, 10 loops each)
+916 ms ± 101 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+1.47 s ± 165 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+782 ms ± 75.4 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+150 ms ± 10.9 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 ## Credit
