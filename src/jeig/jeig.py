@@ -1,5 +1,6 @@
 """Various implementations of `eig` wrapped for use with jax."""
 
+import enum
 import multiprocessing as mp
 import warnings
 from typing import List, Optional, Tuple
@@ -17,128 +18,42 @@ except RuntimeError as exc:
     warnings.warn(str(exc))
 
 
-JAX = "jax"
-NUMPY = "numpy"
-SCIPY = "scipy"
-TORCH = "torch"
+@enum.unique
+class EigBackend(enum.Enum):
+    JAX = "jax"
+    NUMPY = "numpy"
+    SCIPY = "scipy"
+    TORCH = "torch"
 
-BACKEND_EIG = TORCH
+    @classmethod
+    def from_string(cls, backend: str) -> "EigBackend":
+        """Returns the specified backend."""
+        return {
+            cls.JAX.value: cls.JAX,
+            cls.NUMPY.value: cls.NUMPY,
+            cls.SCIPY.value: cls.SCIPY,
+            cls.TORCH.value: cls.TORCH,
+        }[backend]
 
-EPS_EIG = 1e-6
 
-# -----------------------------------------------------------------------------
-# Define the eigendecomposition operation and its custom vjp rule.
-# -----------------------------------------------------------------------------
+_DEFAULT_BACKEND = EigBackend.TORCH
 
 
-@jax.custom_vjp
+def set_backend(backend: str | EigBackend) -> None:
+    """Sets the backend for eigendecomposition."""
+    if not isinstance(backend, EigBackend):
+        backend = EigBackend.from_string(backend)
+    global _DEFAULT_BACKEND
+    _DEFAULT_BACKEND = backend
+
+
 def eig(
-    matrix: jnp.ndarray,
-    eps: float = EPS_EIG,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Computes the eigendecomposition of `matrix`.
-
-    The implementation uses a custom vjp rule to enable calculation of gradients with
-    respect to the eigenvalues and eigenvectors. The expression for the gradient is
-    from [2019 Boeddeker], and a regularization scheme similar to [20921 Colburn] is
-    used.
-
-    Args:
-        matrix: The matrix for which eigenvalues and eigenvectors are sought.
-        eps: Parameter which determines the degree of broadening.
-
-    Returns:
-        The eigenvalues and eigenvectors.
-    """
-    del eps
-    return _eig(matrix)
-
-
-def _eig_fwd(
-    matrix: jnp.ndarray,
-    eps: float,
-) -> Tuple[Tuple[jnp.ndarray, jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray, float]]:
-    """Implements the forward calculation for `eig`."""
-    eigenvalues, eigenvectors = _eig(matrix)
-    return (eigenvalues, eigenvectors), (eigenvalues, eigenvectors, eps)
-
-
-def _eig_bwd(
-    res: Tuple[jnp.ndarray, jnp.ndarray, float],
-    grads: Tuple[jnp.ndarray, jnp.ndarray],
-) -> Tuple[jnp.ndarray, None]:
-    """Implements the backward calculation for `eig`."""
-    eigenvalues, eigenvectors, eps = res
-    grad_eigenvalues, grad_eigenvectors = grads
-
-    # Compute the broadened F-matrix. The expression is similar to that of equation 5
-    # from [2021 Colburn], but differs slightly from both the code and paper.
-    eigenvalues_i = eigenvalues[..., jnp.newaxis, :]
-    eigenvalues_j = eigenvalues[..., :, jnp.newaxis]
-    delta_eig = eigenvalues_i - eigenvalues_j
-    f_broadened = delta_eig.conj() / (jnp.abs(delta_eig) ** 2 + eps)
-
-    # Manually set the diagonal elements to zero, as we do not use broadening here.
-    i = jnp.arange(f_broadened.shape[-1])
-    f_broadened = f_broadened.at[..., i, i].set(0)
-
-    # By jax convention, gradients are with respect to the complex parameters, not with
-    # respect to their conjugates. Take the conjugates.
-    grad_eigenvalues_conj = jnp.conj(grad_eigenvalues)
-    grad_eigenvectors_conj = jnp.conj(grad_eigenvectors)
-
-    eigenvectors_H = matrix_adjoint(eigenvectors)
-    dim = eigenvalues.shape[-1]
-    eye_mask = jnp.eye(dim, dtype=bool)
-    eye_mask = eye_mask.reshape((1,) * (eigenvalues.ndim - 1) + (dim, dim))
-
-    # Then, the gradient is found by equation 4.77 of [2019 Boeddeker].
-    rhs = (
-        diag(grad_eigenvalues_conj)
-        + jnp.conj(f_broadened) * (eigenvectors_H @ grad_eigenvectors_conj)
-        - jnp.conj(f_broadened)
-        * (eigenvectors_H @ eigenvectors)
-        @ jnp.where(eye_mask, jnp.real(eigenvectors_H @ grad_eigenvectors_conj), 0.0)
-    ) @ eigenvectors_H
-    grad_matrix = jnp.linalg.solve(eigenvectors_H, rhs)
-
-    # Take the conjugate of the gradient, reverting to the jax convention
-    # where gradients are with respect to complex parameters.
-    grad_matrix = jnp.conj(grad_matrix)
-
-    # Return `grad_matrix`, and `None` for the gradient with respect to `eps`.
-    return grad_matrix, None
-
-
-eig.defvjp(_eig_fwd, _eig_bwd)
-
-
-def diag(x: jnp.ndarray) -> jnp.ndarray:
-    """A batch-compatible version of `numpy.diag`."""
-    shape = x.shape + (x.shape[-1],)
-    y = jnp.zeros(shape, x.dtype)
-    i = jnp.arange(x.shape[-1])
-    return y.at[..., i, i].set(x)
-
-
-def matrix_adjoint(x: jnp.ndarray) -> jnp.ndarray:
-    """Computes the adjoint for a batch of matrices."""
-    axes = tuple(range(x.ndim - 2)) + (x.ndim - 1, x.ndim - 2)
-    return jnp.conj(jnp.transpose(x, axes=axes))
-
-
-# -----------------------------------------------------------------------------
-# Eigendecompositions for all the backends follow.
-# -----------------------------------------------------------------------------
-
-
-def _eig(
-    matrix: jnp.ndarray, backend: Optional[str] = None
+    matrix: jnp.ndarray, backend: Optional[str] | EigBackend = None
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using the specified backend.
 
     If no backend is `None`, the backend specified by the module-level constant
-    `BACKEND_EIG` is used.
+    `_DEFAULT_BACKEND` is used. This can be updated with the `set_backend`.
 
     Args:
         matrix: The matrix for which the eigendecomposition is sought. May have
@@ -150,7 +65,9 @@ def _eig(
     """
     with jax.ensure_compile_time_eval():
         if backend is None:
-            backend = BACKEND_EIG
+            backend = _DEFAULT_BACKEND
+        elif not isinstance(backend, EigBackend):
+            backend = EigBackend.from_string(backend)
     return EIG_FNS[backend](matrix)
 
 
@@ -215,7 +132,7 @@ def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `torc.linalg.eig`."""
 
     def _eig_fn(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        results = _eig_torch_parallelized(torch.as_tensor(onp.asarray(matrix)))
+        results = _eig_torch_parallelized(torch.as_tensor(onp.array(matrix)))
         eigvals = jnp.asarray([eigval.numpy() for eigval, _ in results])
         eigvecs = jnp.asarray([eigvec.numpy() for _, eigvec in results])
         return eigvals.astype(matrix.dtype), eigvecs.astype(matrix.dtype)
@@ -249,8 +166,8 @@ def _eig_torch_parallelized(x: torch.Tensor) -> List[Tuple[torch.Tensor, torch.T
 
 
 EIG_FNS = {
-    JAX: _eig_jax,
-    NUMPY: _eig_numpy,
-    SCIPY: _eig_scipy,
-    TORCH: _eig_torch,
+    EigBackend.JAX: _eig_jax,
+    EigBackend.NUMPY: _eig_numpy,
+    EigBackend.SCIPY: _eig_scipy,
+    EigBackend.TORCH: _eig_torch,
 }

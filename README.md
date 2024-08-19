@@ -1,11 +1,9 @@
 # jeig - Eigendecompositions wrapped for jax
-`v0.0.2`
+`v0.1.0`
 
 ## Overview
 
 This package wraps eigendecompositions as provided by jax, numpy, scipy, and torch for use with jax. Depending upon your system and your versions of these packages, you may observe significant speed differences.
-
-The wrapped `eig` function also includes a custom vjp rule so that gradients with respect to eigenvalues and eigenvectors can be computed.
 
 ![Speed comparison](/docs/speed.png)
 
