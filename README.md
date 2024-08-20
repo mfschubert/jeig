@@ -5,14 +5,14 @@
 
 This package wraps eigendecompositions as provided by jax, numpy, scipy, and torch for use with jax. Depending upon your system and your versions of these packages, you may observe significant speed differences.
 
-![Speed comparison](/docs/speed.png)
+![Speed comparison](https://github.com/mfschubert/jeig/blob/main/docs/speed.png)
 
 ## Install
 jeig can be installed via pip,
 ```
 pip install jeig
 ```
-This will also install torch. If you only need torch for use with jeig, then the CPU-only version is sufficient and you may wish to install manually as described in the [pytorch docs](https://pytorch.org/get-started/locally/).
+This will also install torch. If you only need torch for use with jeig, then the CPU-only version could be sufficient and you may wish to install manually as described in the [pytorch docs](https://pytorch.org/get-started/locally/).
 
 ## Example usage
 
@@ -42,4 +42,4 @@ jeig.set_backend("torch")
 ```
 
 ## Credit
-The high-level `eig` function and the tests are adapted from [fmmax](https://github.com/facebookresearch/fmmax/tree/main/src/fmmax). The torch implementation of eigendecomposition is due to a [comment](https://github.com/google/jax/issues/10180#issuecomment-1092098074) by @YouJiacheng.
+The torch implementation of eigendecomposition is due to a [comment](https://github.com/google/jax/issues/10180#issuecomment-1092098074) by @YouJiacheng.
