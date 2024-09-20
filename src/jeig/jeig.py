@@ -1,6 +1,7 @@
 """Various implementations of `eig` wrapped for use with jax."""
 
 import enum
+import functools
 import multiprocessing as mp
 import warnings
 from typing import List, Optional, Tuple
@@ -24,6 +25,7 @@ class EigBackend(enum.Enum):
     NUMPY = "numpy"
     SCIPY = "scipy"
     TORCH = "torch"
+    TORCH_64 = "torch_64"
 
     @classmethod
     def from_string(cls, backend: str) -> "EigBackend":
@@ -33,6 +35,7 @@ class EigBackend(enum.Enum):
             cls.NUMPY.value: cls.NUMPY,
             cls.SCIPY.value: cls.SCIPY,
             cls.TORCH.value: cls.TORCH,
+            cls.TORCH_64.value: cls.TORCH_64,
         }[backend]
 
 
@@ -128,11 +131,17 @@ def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     return eigvals, eigvecs
 
 
-def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Eigendecomposition using `torc.linalg.eig`."""
+def _eig_torch(
+    matrix: jnp.ndarray, force_x64: bool = False
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Eigendecomposition using `torch.linalg.eig`."""
 
     def _eig_fn(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        results = _eig_torch_parallelized(torch.as_tensor(onp.array(matrix)))
+        if force_x64:
+            matrix_numpy = onp.array(matrix, dtype=onp.complex128)
+        else:
+            matrix_numpy = onp.array(matrix)
+        results = _eig_torch_parallelized(torch.as_tensor(matrix_numpy))
         eigvals = jnp.asarray([eigval.numpy() for eigval, _ in results])
         eigvecs = jnp.asarray([eigvec.numpy() for _, eigvec in results])
         return eigvals.astype(matrix.dtype), eigvecs.astype(matrix.dtype)
@@ -170,4 +179,5 @@ EIG_FNS = {
     EigBackend.NUMPY: _eig_numpy,
     EigBackend.SCIPY: _eig_scipy,
     EigBackend.TORCH: _eig_torch,
+    EigBackend.TORCH_64: functools.partial(_eig_torch, force_x64=True),
 }

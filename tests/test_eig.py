@@ -19,6 +19,7 @@ BACKENDS = [
     jeig.EigBackend.NUMPY,
     jeig.EigBackend.SCIPY,
     jeig.EigBackend.TORCH,
+    jeig.EigBackend.TORCH_64,
 ]
 
 SHAPES = [(1, 16, 16), (2, 16, 16), (2, 64, 64)]
