@@ -25,6 +25,7 @@ class EigBackend(enum.Enum):
     NUMPY = "numpy"
     SCIPY = "scipy"
     TORCH = "torch"
+    TORCH_32 = "torch_32"
     TORCH_64 = "torch_64"
 
     @classmethod
@@ -35,6 +36,7 @@ class EigBackend(enum.Enum):
             cls.NUMPY.value: cls.NUMPY,
             cls.SCIPY.value: cls.SCIPY,
             cls.TORCH.value: cls.TORCH,
+            cls.TORCH_32.value: cls.TORCH_32,
             cls.TORCH_64.value: cls.TORCH_64,
         }[backend]
 
@@ -132,13 +134,21 @@ def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
 
 def _eig_torch(
-    matrix: jnp.ndarray, force_x64: bool = False
+    matrix: jnp.ndarray,
+    precision_override: Optional[int] = None,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `torch.linalg.eig`."""
+    if precision_override not in (32, 64, None):
+        raise ValueError(
+            f"`precision_override` must be `32`, `64` or `None`, but got "
+            f"`{precision_override}`."
+        )
 
     def _eig_fn(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        if force_x64:
+        if precision_override == 64:
             matrix_numpy = onp.array(matrix, dtype=onp.complex128)
+        elif precision_override == 32:
+            matrix_numpy = onp.array(matrix, dtype=onp.complex64)
         else:
             matrix_numpy = onp.array(matrix)
         results = _eig_torch_parallelized(torch.as_tensor(matrix_numpy))
@@ -179,5 +189,6 @@ EIG_FNS = {
     EigBackend.NUMPY: _eig_numpy,
     EigBackend.SCIPY: _eig_scipy,
     EigBackend.TORCH: _eig_torch,
-    EigBackend.TORCH_64: functools.partial(_eig_torch, force_x64=True),
+    EigBackend.TORCH_32: functools.partial(_eig_torch, precision_override=32),
+    EigBackend.TORCH_64: functools.partial(_eig_torch, precision_override=64),
 }

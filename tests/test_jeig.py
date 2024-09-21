@@ -25,7 +25,7 @@ BACKENDS = [
 SHAPES = [(1, 16, 16), (2, 16, 16), (2, 64, 64)]
 
 
-class BackendComparisonTest(unittest.TestCase):
+class Backend64ComparisonTest(unittest.TestCase):
     @parameterized.expand(itertools.product(BACKENDS, SHAPES))
     def test_backends_against_jax_symmetric_real(self, backend, shape):
         matrix = jax.random.normal(jax.random.PRNGKey(0), shape)
@@ -57,6 +57,47 @@ class BackendComparisonTest(unittest.TestCase):
         onp.testing.assert_allclose(eigval, expected_eigval)
         onp.testing.assert_allclose(eigvec, expected_eigvec)
 
+class Backend32ComparisonTest(unittest.TestCase):
+    @parameterized.expand(itertools.product(SHAPES))
+    def test_torch32_against_scipy_symmetric_real(self, shape):
+        matrix = jax.random.normal(jax.random.PRNGKey(0), shape)
+        matrix = 0.5 * (matrix + jnp.swapaxes(matrix, -1, -2))
+        matrix = matrix.astype(jnp.float32)
+
+        expected_eigval, expected_eigvec = jeig.eig(matrix, backend=jeig.EigBackend.SCIPY)
+        eigval, eigvec = jeig.eig(matrix, backend=jeig.EigBackend.TORCH_32)
+        with self.subTest("eigenvalues"):
+            onp.testing.assert_allclose(eigval, expected_eigval)
+        with self.subTest("eigenvectors"):
+            onp.testing.assert_allclose(eigvec, expected_eigvec)
+
+    @parameterized.expand(itertools.product(SHAPES))
+    def test_torch32_against_scipy_real(self, shape):
+        matrix = jax.random.normal(jax.random.PRNGKey(0), shape)
+        matrix = matrix.astype(jnp.float32)
+
+        expected_eigval, expected_eigvec = jeig.eig(matrix, backend=jeig.EigBackend.SCIPY)
+        eigval, eigvec = jeig.eig(matrix, backend=jeig.EigBackend.TORCH_32)
+        with self.subTest("eigenvalues"):
+            onp.testing.assert_allclose(eigval, expected_eigval)
+        with self.subTest("eigenvectors"):
+            onp.testing.assert_allclose(eigvec, expected_eigvec)
+
+    @parameterized.expand(itertools.product(SHAPES))
+    def test_torch32_against_scipy_complex(self, shape):
+        real, imag = jax.random.normal(jax.random.PRNGKey(0), (2,) + shape)
+        matrix = real + 1j * imag
+        matrix = matrix.astype(jnp.complex64)
+
+        expected_eigval, expected_eigvec = jeig.eig(matrix, backend=jeig.EigBackend.SCIPY)
+        eigval, eigvec = jeig.eig(matrix, backend=jeig.EigBackend.TORCH_32)
+
+        with self.subTest("eigenvalues"):
+            onp.testing.assert_allclose(eigval, expected_eigval)
+        with self.subTest("eigenvectors"):
+            onp.testing.assert_allclose(eigvec, expected_eigvec) 
+
+class BackendSetterTest(unittest.TestCase):
     @parameterized.expand(BACKENDS)
     def test_set_backend(self, backend):
         self.assertEqual(_jeig._DEFAULT_BACKEND, jeig.EigBackend.TORCH)
