@@ -75,22 +75,25 @@ def eig(
 
 def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
+    if jax.devices()[0] == jax.devices("cpu")[0]:
+        return jnp.linalg.eig(matrix)
+    else:
+        eigvals, eigvecs = jax.pure_callback(
+            _eig_jax_cpu,
+            (
+                jnp.ones(matrix.shape[:-1], dtype=complex),  # Eigenvalues
+                jnp.ones(matrix.shape, dtype=complex),  # Eigenvectors
+            ),
+            matrix.astype(complex),
+            vectorized=True,
+        )
+        return jnp.asarray(eigvals), jnp.asarray(eigvecs)
 
-    def _eig_fn(matrix: jnp.ndarray) -> Tuple[NDArray, NDArray]:
-        with jax.default_device(jax.devices("cpu")[0]):
-            eigval, eigvec = jax.jit(jnp.linalg.eig)(matrix)
-            return onp.asarray(eigval), onp.asarray(eigvec)
 
-    eigval, eigvec = jax.pure_callback(
-        _eig_fn,
-        (
-            jnp.ones(matrix.shape[:-1], dtype=complex),  # Eigenvalues
-            jnp.ones(matrix.shape, dtype=complex),  # Eigenvectors
-        ),
-        matrix.astype(complex),
-        vectorized=True,
-    )
-    return jnp.asarray(eigval), jnp.asarray(eigvec)
+# Define jax eigendecomposition that runs on CPU. Note that the compilation takes
+# place at module import time. If the `jit` is inside a function, deadlocks can occur.
+with jax.default_device(jax.devices("cpu")[0]):
+    _eig_jax_cpu = jax.jit(jnp.linalg.eig)
 
 
 def _eig_numpy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
