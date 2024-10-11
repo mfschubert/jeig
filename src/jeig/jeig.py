@@ -3,7 +3,7 @@
 import enum
 import multiprocessing as mp
 import warnings
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -16,6 +16,8 @@ try:
     torch.set_num_interop_threads(mp.cpu_count())
 except RuntimeError as exc:
     warnings.warn(str(exc))
+
+NDArray = onp.ndarray[Any, Any]
 
 
 @enum.unique
@@ -74,10 +76,10 @@ def eig(
 def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
 
-    def _eig_fn(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def _eig_fn(matrix: jnp.ndarray) -> Tuple[NDArray, NDArray]:
         with jax.default_device(jax.devices("cpu")[0]):
             eigval, eigvec = jax.jit(jnp.linalg.eig)(matrix)
-            return jnp.asarray(eigval), jnp.asarray(eigvec)
+            return onp.asarray(eigval), onp.asarray(eigvec)
 
     eigval, eigvec = jax.pure_callback(
         _eig_fn,
@@ -131,10 +133,10 @@ def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `torc.linalg.eig`."""
 
-    def _eig_fn(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def _eig_fn(matrix: jnp.ndarray) -> Tuple[NDArray, NDArray]:
         results = _eig_torch_parallelized(torch.as_tensor(onp.array(matrix)))
-        eigvals = jnp.asarray([eigval.numpy() for eigval, _ in results])
-        eigvecs = jnp.asarray([eigvec.numpy() for _, eigvec in results])
+        eigvals = onp.asarray([eigval.numpy() for eigval, _ in results])
+        eigvecs = onp.asarray([eigvec.numpy() for _, eigvec in results])
         return eigvals.astype(matrix.dtype), eigvecs.astype(matrix.dtype)
 
     batch_shape = matrix.shape[:-2]
