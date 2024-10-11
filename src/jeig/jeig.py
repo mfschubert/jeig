@@ -78,7 +78,7 @@ def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     if jax.devices()[0] == jax.devices("cpu")[0]:
         return jnp.linalg.eig(matrix)
     else:
-        return jax.pure_callback(
+        eigvals, eigvecs = jax.pure_callback(
             _eig_jax_cpu,
             (
                 jnp.ones(matrix.shape[:-1], dtype=complex),  # Eigenvalues
@@ -87,6 +87,7 @@ def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
             matrix.astype(complex),
             vectorized=True,
         )
+        return jnp.asarray(eigvals), jnp.asarray(eigvecs)
 
 
 # Define jax eigendecomposition that runs on CPU. Note that the compilation takes
