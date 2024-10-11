@@ -75,6 +75,8 @@ def eig(
 
 def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
+    # If using CPU backend, using `pure_callback` to call a jit-compiled version of
+    # `jnp.linalg.eig` is flaky and can cause deadlocks. Directly call it instead.
     if jax.devices()[0] == jax.devices("cpu")[0]:
         return jnp.linalg.eig(matrix)
     else:
@@ -90,8 +92,6 @@ def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         return jnp.asarray(eigvals), jnp.asarray(eigvecs)
 
 
-# Define jax eigendecomposition that runs on CPU. Note that the compilation takes
-# place at module import time. If the `jit` is inside a function, deadlocks can occur.
 with jax.default_device(jax.devices("cpu")[0]):
     _eig_jax_cpu = jax.jit(jnp.linalg.eig)
 
