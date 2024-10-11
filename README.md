@@ -1,5 +1,5 @@
 # jeig - Eigendecompositions wrapped for jax
-`v0.1.1`
+`v0.1.2`
 
 ## Overview
 
