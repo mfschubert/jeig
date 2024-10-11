@@ -21,7 +21,32 @@ BACKENDS = [
     jeig.EigBackend.TORCH,
 ]
 
-SHAPES = [(1, 16, 16), (2, 16, 16), (2, 64, 64)]
+SHAPES = [(1, 2, 2), (1, 16, 16), (2, 16, 16), (2, 64, 64)]
+
+
+def _match_eigs(eigval, eigvec, reference_eigval, reference_eigvec):
+    """Sorts eigenvalues/eigenvectors and enforces a phase convention."""
+    delta = reference_eigval[..., jnp.newaxis] - eigval[..., jnp.newaxis, :]
+    error = jnp.abs(delta)
+    idx = onp.argmin(error, axis=-1)
+
+    sorted_eigval = jnp.take_along_axis(eigval, idx, axis=-1)
+    sorted_eigvec = jnp.take_along_axis(eigvec, idx[..., jnp.newaxis, :], axis=-1)
+
+    # Align the phase of the eigenvectors to those of the reference.
+    max_ind = jnp.argmax(jnp.abs(sorted_eigvec), axis=-2)
+    max_component = jnp.take_along_axis(
+        sorted_eigvec, max_ind[..., jnp.newaxis, :], axis=-2
+    )
+    reference_max_component = jnp.take_along_axis(
+        reference_eigvec, max_ind[..., jnp.newaxis, :], axis=-2
+    )
+    sorted_eigvec *= jnp.exp(
+        1j * (jnp.angle(max_component) - jnp.angle(reference_max_component))
+    )
+
+    assert eigvec.shape == sorted_eigvec.shape
+    return sorted_eigval, sorted_eigvec
 
 
 class BackendComparisonTest(unittest.TestCase):
@@ -32,9 +57,10 @@ class BackendComparisonTest(unittest.TestCase):
 
         expected_eigval, expected_eigvec = jeig.eig(matrix, backend=jeig.EigBackend.JAX)
         eigval, eigvec = jeig.eig(matrix, backend=backend)
+        eigval, eigvec = _match_eigs(eigval, eigvec, expected_eigval, expected_eigvec)
 
-        onp.testing.assert_allclose(eigval, expected_eigval)
-        onp.testing.assert_allclose(eigvec, expected_eigvec)
+        onp.testing.assert_allclose(eigval, expected_eigval, err_msg=(backend, shape))
+        onp.testing.assert_allclose(eigvec, expected_eigvec, err_msg=(backend, shape))
 
     @parameterized.expand(itertools.product(BACKENDS, SHAPES))
     def test_backends_against_jax_real(self, backend, shape):
@@ -42,8 +68,10 @@ class BackendComparisonTest(unittest.TestCase):
 
         expected_eigval, expected_eigvec = jeig.eig(matrix, backend=jeig.EigBackend.JAX)
         eigval, eigvec = jeig.eig(matrix, backend=backend)
-        onp.testing.assert_allclose(eigval, expected_eigval, err_msg=backend)
-        onp.testing.assert_allclose(eigvec, expected_eigvec, err_msg=backend)
+        eigval, eigvec = _match_eigs(eigval, eigvec, expected_eigval, expected_eigvec)
+
+        onp.testing.assert_allclose(eigval, expected_eigval, err_msg=(backend, shape))
+        onp.testing.assert_allclose(eigvec, expected_eigvec, err_msg=(backend, shape))
 
     @parameterized.expand(itertools.product(BACKENDS, SHAPES))
     def test_backends_against_jax_complex(self, backend, shape):
@@ -52,9 +80,10 @@ class BackendComparisonTest(unittest.TestCase):
 
         expected_eigval, expected_eigvec = jeig.eig(matrix, backend=jeig.EigBackend.JAX)
         eigval, eigvec = jeig.eig(matrix, backend=backend)
+        eigval, eigvec = _match_eigs(eigval, eigvec, expected_eigval, expected_eigvec)
 
-        onp.testing.assert_allclose(eigval, expected_eigval)
-        onp.testing.assert_allclose(eigvec, expected_eigvec)
+        onp.testing.assert_allclose(eigval, expected_eigval, err_msg=(backend, shape))
+        onp.testing.assert_allclose(eigvec, expected_eigvec, err_msg=(backend, shape))
 
     @parameterized.expand(BACKENDS)
     def test_set_backend(self, backend):
