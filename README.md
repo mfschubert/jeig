@@ -3,7 +3,7 @@
 
 ## Overview
 
-This package wraps eigendecompositions as provided by jax, magma, numpy, scipy, and torch for use with jax. Depending upon your system and your versions of these packages, you may observe significant speed differences.
+This package wraps eigendecompositions as provided by jax, magma, numpy, scipy, and torch for use with jax. Depending upon your system and your versions of these packages, you may observe significant speed differences. The following were obtained using jax 0.4.37 on a system with 28-core Intel Xeon w7-3465X and NVIDIA RTX4090.
 
 ![Speed comparison](https://github.com/mfschubert/jeig/blob/main/docs/speed.png?raw=true)
 
@@ -20,25 +20,24 @@ This will also install torch. If you only need torch for use with jeig, then the
 import jax
 import jeig
 
-matrix = jax.random.normal(jax.random.PRNGKey(0), (8, 320, 320))
+matrix = jax.random.normal(jax.random.PRNGKey(0), (16, 1024, 1024))
 
-jeig.set_backend("jax")
-%timeit jeig.eig(matrix)
+%timeit jax.block_until_ready(jeig.eig(matrix, backend="jax"))
 
-jeig.set_backend("numpy")
-%timeit jeig.eig(matrix)
+%timeit jax.block_until_ready(jeig.eig(matrix, backend="magma"))
 
-jeig.set_backend("scipy")
-%timeit jeig.eig(matrix)
+%timeit jax.block_until_ready(jeig.eig(matrix, backend="numpy"))
 
-jeig.set_backend("torch")
-%timeit jeig.eig(matrix)
+%timeit jax.block_until_ready(jeig.eig(matrix, backend="scipy"))
+
+%timeit jax.block_until_ready(jeig.eig(matrix, backend="torch"))
 ```
 ```
-916 ms ± 101 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-1.47 s ± 165 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-782 ms ± 75.4 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-150 ms ± 10.9 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+6.81 s ± 54.2 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+1min 15s ± 1.35 s per loop (mean ± std. dev. of 7 runs, 1 loop each)
+28.6 s ± 341 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+14.8 s ± 396 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+1.43 s ± 77.7 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 ```
 
 ## Credit
