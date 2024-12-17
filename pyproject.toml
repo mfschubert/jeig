@@ -1,7 +1,7 @@
 [project]
 
 name = "jeig"
-version = "v0.2.0"
+version = "v0.2.1"
 description = "Various eigendecomposition implementations wrapped for jax."
 keywords = ["jax", "eigendecomposition", "eig", "torch", "scipy", "numpy"]
 readme = "README.md"
@@ -16,7 +16,7 @@ maintainers = [
 ]
 
 dependencies = [
-    "jax>=0.4.37,<=0.4.37",
+    "jax>=0.4.37",
     "jaxlib",
     "numpy",
     "scipy",
