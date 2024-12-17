@@ -3,7 +3,7 @@
 
 ## Overview
 
-This package wraps eigendecompositions as provided by jax, numpy, scipy, and torch for use with jax. Depending upon your system and your versions of these packages, you may observe significant speed differences.
+This package wraps eigendecompositions as provided by jax, magma, numpy, scipy, and torch for use with jax. Depending upon your system and your versions of these packages, you may observe significant speed differences.
 
 ![Speed comparison](https://github.com/mfschubert/jeig/blob/main/docs/speed.png?raw=true)
 

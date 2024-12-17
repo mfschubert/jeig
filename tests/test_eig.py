@@ -16,6 +16,7 @@ jax.config.update("jax_enable_x64", True)
 
 BACKENDS = [
     jeig.EigBackend.JAX,
+    jeig.EigBackend.MAGMA,
     jeig.EigBackend.NUMPY,
     jeig.EigBackend.SCIPY,
     jeig.EigBackend.TORCH,
@@ -102,3 +103,15 @@ class BackendComparisonTest(unittest.TestCase):
         )
         jeig.set_backend(jeig.EigBackend.TORCH)
         self.assertEqual(_jeig._DEFAULT_BACKEND, jeig.EigBackend.TORCH)
+
+    @parameterized.expand(BACKENDS)
+    def test_no_unwanted_type_promotion(self, backend):
+        matrix = jax.random.normal(jax.random.PRNGKey(0), (64, 64), dtype=jnp.float32)
+
+        eigvals, eigvecs = jeig.eig(matrix, backend=backend)
+        self.assertEqual(eigvals.dtype, jnp.complex64)
+        self.assertEqual(eigvecs.dtype, jnp.complex64)
+
+        eigvals, eigvecs = jeig.eig(matrix.astype(jnp.complex128), backend=backend)
+        self.assertEqual(eigvals.dtype, jnp.complex128)
+        self.assertEqual(eigvecs.dtype, jnp.complex128)

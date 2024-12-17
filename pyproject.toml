@@ -16,7 +16,7 @@ maintainers = [
 ]
 
 dependencies = [
-    "jax",
+    "jax>=0.4.37,<=0.4.37",
     "jaxlib",
     "numpy",
     "scipy",
@@ -33,6 +33,7 @@ dev = [
     "bump-my-version",
     "darglint",
     "jeig[tests]",
+    "matplotlib",
     "mypy",
     "pre-commit",
 ]
