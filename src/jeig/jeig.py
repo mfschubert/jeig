@@ -99,14 +99,14 @@ def _eig_magma(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
 def _eig_numpy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `numpy.linalg.eig`."""
-    dtype = jnp.promote_types(matrix, jnp.complex64)
+    dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
     eigval, eigvec = jax.pure_callback(
         onp.linalg.eig,
         (
             jnp.ones(matrix.shape[:-1], dtype=dtype),  # Eigenvalues
             jnp.ones(matrix.shape, dtype=dtype),  # Eigenvectors
         ),
-        matrix,
+        matrix.astype(dtype),
         vmap_method="expand_dims",
     )
     return jnp.asarray(eigval), jnp.asarray(eigvec)
@@ -116,14 +116,14 @@ def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `scipy.linalg.eig`."""
 
     def _eig_fn(m: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        dtype = jnp.promote_types(matrix, jnp.complex64)
+        dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
         eigval, eigvec = jax.pure_callback(
             scipy.linalg.eig,
             (
                 jnp.ones(m.shape[:-1], dtype=dtype),  # Eigenvalues
                 jnp.ones(m.shape, dtype=dtype),  # Eigenvectors
             ),
-            m,
+            m.astype(dtype),
             vmap_method="sequential",
         )
         return jnp.asarray(eigval), jnp.asarray(eigvec)
@@ -138,7 +138,7 @@ def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
 def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `torc.linalg.eig`."""
-    dtype = jnp.promote_types(matrix, jnp.complex64)
+    dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
 
     def _eig_fn(matrix: jnp.ndarray) -> Tuple[NDArray, NDArray]:
         results = _eig_torch_parallelized(torch.as_tensor(onp.array(matrix)))
@@ -155,7 +155,7 @@ def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
             jnp.ones(matrix.shape[:-1], dtype=dtype),  # Eigenvalues
             jnp.ones(matrix.shape, dtype=dtype),  # Eigenvectors
         ),
-        matrix,
+        matrix.astype(dtype),
         vmap_method="expand_dims",
     )
     eigvecs = jnp.reshape(eigvecs, batch_shape + eigvecs.shape[-2:])
