@@ -85,7 +85,10 @@ def eig(
 
 def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
-    return jax.lax.linalg.eig(matrix, compute_left_eigenvectors=False, use_magma=False)
+    eigval, eigvec = jax.lax.linalg.eig(
+        matrix, compute_left_eigenvectors=False, use_magma=False
+    )
+    return eigval, eigvec
 
 
 def _eig_magma(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -94,7 +97,10 @@ def _eig_magma(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         raise ValueError(
             "`MAGMA` backend is not available; `torch.cuda.has_magma` is `False`."
         )
-    return jax.lax.linalg.eig(matrix, compute_left_eigenvectors=False, use_magma=True)
+    eigval, eigvec = jax.lax.linalg.eig(
+        matrix, compute_left_eigenvectors=False, use_magma=True
+    )
+    return eigval, eigvec
 
 
 def _eig_numpy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
