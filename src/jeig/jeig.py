@@ -148,8 +148,8 @@ def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
     def _eig_fn(matrix: jnp.ndarray) -> Tuple[NDArray, NDArray]:
         batch_shape = matrix.shape[:-2]
-        matrix = onp.array(matrix).reshape((-1,) + matrix.shape[-2:])
-        results = _eig_torch_parallelized(torch.as_tensor(matrix))
+        matrix_flat = onp.array(matrix).reshape((-1,) + matrix.shape[-2:])
+        results = _eig_torch_parallelized(torch.as_tensor(matrix_flat))
         eigvals = onp.asarray([eigval.numpy() for eigval, _ in results], dtype=dtype)
         eigvecs = onp.asarray([eigvec.numpy() for _, eigvec in results], dtype=dtype)
         eigvals = eigvals.reshape(batch_shape + (eigvals.shape[-1],))
