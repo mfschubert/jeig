@@ -147,14 +147,15 @@ def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
 
     def _eig_fn(matrix: jnp.ndarray) -> Tuple[NDArray, NDArray]:
-        results = _eig_torch_parallelized(torch.as_tensor(onp.array(matrix)))
+        batch_shape = matrix.shape[:-2]
+        matrix = onp.array(matrix).reshape((-1,) + matrix.shape[-2:])
+        results = _eig_torch_parallelized(torch.as_tensor(matrix))
         eigvals = onp.asarray([eigval.numpy() for eigval, _ in results], dtype=dtype)
         eigvecs = onp.asarray([eigvec.numpy() for _, eigvec in results], dtype=dtype)
+        eigvals = eigvals.reshape(batch_shape + (eigvals.shape[-1],))
+        eigvecs = eigvecs.reshape(batch_shape + eigvecs.shape[-2:])
         return eigvals, eigvecs
 
-    batch_shape = matrix.shape[:-2]
-    matrix = jnp.reshape(matrix, (-1,) + matrix.shape[-2:])
-    assert matrix.ndim == 3
     eigvals, eigvecs = jax.pure_callback(
         _eig_fn,
         (
@@ -164,8 +165,6 @@ def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         matrix.astype(dtype),
         vmap_method="expand_dims",
     )
-    eigvecs = jnp.reshape(eigvecs, batch_shape + eigvecs.shape[-2:])
-    eigvals = jnp.reshape(eigvals, batch_shape + eigvals.shape[-1:])
     return eigvals, eigvecs
 
 
