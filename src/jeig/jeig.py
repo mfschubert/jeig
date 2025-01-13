@@ -1,9 +1,11 @@
 """Various implementations of `eig` wrapped for use with jax."""
 
 import enum
+import functools
 import multiprocessing as mp
 import os
 import warnings
+from packaging import version
 from typing import Any, List, Optional, Tuple
 
 import jax
@@ -23,6 +25,9 @@ if torch.cuda.has_magma:
     os.environ["JAX_GPU_MAGMA_PATH"] = os.path.join(
         os.path.dirname(torch.__file__), "lib", "libtorch_cuda_linalg.so"
     )
+
+_JAX_SUPPORTS_MAGMA = version.Version(jax.__version__) >= version.Version("0.4.36")
+_JAX_HAS_MAGMA = torch.cuda.has_magma
 
 NDArray = onp.ndarray[Any, Any]
 
@@ -85,15 +90,37 @@ def eig(
 
 def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
-    eigval, eigvec = jax.lax.linalg.eig(
-        matrix, compute_left_eigenvectors=False, use_magma=False
-    )
-    return eigval, eigvec
+    if jax.devices()[0] == jax.devices("cpu")[0]:
+        return jnp.linalg.eig(matrix)
+    else:
+        dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
+        eigenvalues, eigenvectors = jax.pure_callback(
+            _eig_jax_cpu,
+            (
+                jnp.ones(matrix.shape[:-1], dtype=dtype),  # Eigenvalues
+                jnp.ones(matrix.shape, dtype=dtype),  # Eigenvectors
+            ),
+            matrix.astype(dtype),
+            vmap_method="broadcast_all",
+        )
+        return eigenvalues, eigenvectors
+
+
+with jax.default_device(jax.devices("cpu")[0]):
+    if _JAX_SUPPORTS_MAGMA:
+        _eig_jax_cpu = jax.jit(functools.partial(jax.lax.linalg.eig, use_magma=False))
+    else:
+        _eig_jax_cpu = jax.jit(jnp.linalg.eig)
 
 
 def _eig_magma(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
-    if not torch.cuda.has_magma:
+    if not _JAX_SUPPORTS_MAGMA:
+        raise ValueError(
+            f"`MAGMA` backend is not available; jax version {jax.__version__} is less "
+            f"than minimum 0.4.36."
+        )
+    if not _JAX_HAS_MAGMA:
         raise ValueError(
             "`MAGMA` backend is not available; `torch.cuda.has_magma` is `False`."
         )
