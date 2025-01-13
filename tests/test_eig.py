@@ -16,11 +16,13 @@ jax.config.update("jax_enable_x64", True)
 
 BACKENDS = [
     jeig.EigBackend.JAX,
-    jeig.EigBackend.MAGMA,
     jeig.EigBackend.NUMPY,
     jeig.EigBackend.SCIPY,
     jeig.EigBackend.TORCH,
 ]
+# Only test the magma backend if supported by the installed jax and torch versions.
+if _jeig._JAX_SUPPORTS_MAGMA and _jeig._JAX_HAS_MAGMA:
+    BACKENDS.append(jeig.EigBackend.MAGMA)
 
 SHAPES = [(1, 2, 2), (1, 16, 16), (2, 16, 16), (2, 64, 64)]
 
