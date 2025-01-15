@@ -1,5 +1,6 @@
 # jeig - Eigendecompositions wrapped for jax
-`v0.2.4`
+![Continuous integration](https://github.com/mfschubert/jeig/actions/workflows/build-ci.yml/badge.svg)
+![PyPI version](https://img.shields.io/pypi/v/jeig)
 
 ## Overview
 
