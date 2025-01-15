@@ -1,6 +1,6 @@
 """jeig - Various eigendecomposition implementations wrapped for jax."""
 
-__version__ = "v0.2.3"
+__version__ = "v0.2.4"
 __author__ = "Martin F. Schubert <mfschubert@gmail.com>"
 
 

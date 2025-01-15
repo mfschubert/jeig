@@ -29,6 +29,14 @@ if torch.cuda.has_magma:
 _JAX_SUPPORTS_MAGMA = version.Version(jax.__version__) >= version.Version("0.4.36")
 _JAX_HAS_MAGMA = torch.cuda.has_magma
 
+if version.Version(jax.__version__) > version.Version("0.4.31"):
+    callback = functools.partial(jax.pure_callback, vmap_method="expand_dims")
+    callback_sequential = functools.partial(jax.pure_callback, vmap_method="sequential")
+else:
+    callback = functools.partial(jax.pure_callback, vectorized=True)
+    callback_sequential = functools.partial(jax.pure_callback, vectorized=False)
+
+
 NDArray = onp.ndarray[Any, Any]
 
 
@@ -94,14 +102,13 @@ def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         return jnp.linalg.eig(matrix)
     else:
         dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
-        eigenvalues, eigenvectors = jax.pure_callback(
+        eigenvalues, eigenvectors = callback(
             _eig_jax_cpu,
             (
                 jnp.ones(matrix.shape[:-1], dtype=dtype),  # Eigenvalues
                 jnp.ones(matrix.shape, dtype=dtype),  # Eigenvectors
             ),
             matrix.astype(dtype),
-            vmap_method="broadcast_all",
         )
         return eigenvalues, eigenvectors
 
@@ -133,14 +140,13 @@ def _eig_magma(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 def _eig_numpy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `numpy.linalg.eig`."""
     dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
-    eigval, eigvec = jax.pure_callback(
+    eigval, eigvec = callback(
         onp.linalg.eig,
         (
             jnp.ones(matrix.shape[:-1], dtype=dtype),  # Eigenvalues
             jnp.ones(matrix.shape, dtype=dtype),  # Eigenvectors
         ),
         matrix.astype(dtype),
-        vmap_method="expand_dims",
     )
     return jnp.asarray(eigval), jnp.asarray(eigvec)
 
@@ -150,14 +156,13 @@ def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
     def _eig_fn(m: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
-        eigval, eigvec = jax.pure_callback(
+        eigval, eigvec = callback_sequential(
             scipy.linalg.eig,
             (
                 jnp.ones(m.shape[:-1], dtype=dtype),  # Eigenvalues
                 jnp.ones(m.shape, dtype=dtype),  # Eigenvectors
             ),
             m.astype(dtype),
-            vmap_method="sequential",
         )
         return jnp.asarray(eigval), jnp.asarray(eigvec)
 
@@ -183,14 +188,13 @@ def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         eigvecs = eigvecs.reshape(batch_shape + eigvecs.shape[-2:])
         return eigvals, eigvecs
 
-    eigvals, eigvecs = jax.pure_callback(
+    eigvals, eigvecs = callback(
         _eig_fn,
         (
             jnp.ones(matrix.shape[:-1], dtype=dtype),  # Eigenvalues
             jnp.ones(matrix.shape, dtype=dtype),  # Eigenvectors
         ),
         matrix.astype(dtype),
-        vmap_method="expand_dims",
     )
     return eigvals, eigvecs
 
