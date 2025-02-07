@@ -1,7 +1,13 @@
 """Tests for jax-wrapped eigendecomposition."""
 
 import itertools
+import multiprocessing as mp
 import unittest
+import os
+
+# ruff: noqa: E402
+num_cpu = mp.cpu_count()
+os.environ["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={num_cpu}"
 
 import jax
 import jax.numpy as jnp
@@ -21,7 +27,7 @@ BACKENDS = [
     jeig.EigBackend.TORCH,
 ]
 # Only test the magma backend if supported by the installed jax and torch versions.
-if _jeig._JAX_SUPPORTS_MAGMA and _jeig._JAX_HAS_MAGMA:
+if _jeig._JAX_SUPPORTS_GPU_EIG and _jeig._TORCH_HAS_MAGMA:
     BACKENDS.append(jeig.EigBackend.MAGMA)
 
 SHAPES = [(1, 2, 2), (1, 16, 16), (2, 16, 16), (2, 64, 64)]

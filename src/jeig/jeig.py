@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import numpy as onp
 import scipy  # type: ignore[import-untyped]
 import torch
+from jax.experimental import shard_map
 
 try:
     torch.set_num_threads(1)
@@ -26,8 +27,9 @@ if torch.cuda.has_magma:
         os.path.dirname(torch.__file__), "lib", "libtorch_cuda_linalg.so"
     )
 
-_JAX_SUPPORTS_MAGMA = version.Version(jax.__version__) >= version.Version("0.4.36")
-_JAX_HAS_MAGMA = torch.cuda.has_magma
+_JAX_SUPPORTS_GPU_EIG = version.Version(jax.__version__) >= version.Version("0.4.36")
+_JAX_HAS_GPU = jax.devices()[0] != jax.devices("cpu")[0]
+_TORCH_HAS_MAGMA = torch.cuda.has_magma
 
 if version.Version(jax.__version__) > version.Version("0.4.31"):
     callback = functools.partial(jax.pure_callback, vmap_method="expand_dims")
@@ -98,12 +100,19 @@ def eig(
 
 def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
-    if jax.devices()[0] == jax.devices("cpu")[0]:
+    if _JAX_SUPPORTS_GPU_EIG:
+        return jax.lax.linalg.eig(
+            matrix,
+            compute_left_eigenvectors=False,
+            use_magma=False,
+        )
+    elif not _JAX_HAS_GPU:
         return jnp.linalg.eig(matrix)
     else:
+        # Older jax versions on GPU require some gymnastics to run on CPU.
         dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
         eigenvalues, eigenvectors = callback(
-            _eig_jax_cpu,
+            _jit_jnp_linalg_eig,
             (
                 jnp.ones(matrix.shape[:-1], dtype=dtype),  # Eigenvalues
                 jnp.ones(matrix.shape, dtype=dtype),  # Eigenvectors
@@ -113,21 +122,63 @@ def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         return eigenvalues, eigenvectors
 
 
-with jax.default_device(jax.devices("cpu")[0]):
-    if _JAX_SUPPORTS_MAGMA:
-        _eig_jax_cpu = jax.jit(functools.partial(jax.lax.linalg.eig, use_magma=False))
-    else:
-        _eig_jax_cpu = jax.jit(jnp.linalg.eig)
+_jit_jnp_linalg_eig = jax.jit(jnp.linalg.eig)
+
+
+def _eig_jax_multicore(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Eigendecomposition using `jax.numpy.linalg.eig` with multicore support."""
+    cpu_count = len(jax.devices("cpu"))
+
+    # If there is only one CPU, or if on GPU backend with a jax version that does not
+    # support directly calling `jax.lax.linalg.eig`, fall back to single core.
+    if cpu_count == 1 or (_JAX_HAS_GPU and not _JAX_SUPPORTS_GPU_EIG):
+        return _eig_jax(matrix)
+
+    with jax.ensure_compile_time_eval():
+        batch_shape = matrix.shape[:-2]
+        matrix_shape = matrix.shape[-2:]
+        batch_size = int(onp.prod(batch_shape))
+        num_parallel = min(batch_size, cpu_count)
+
+        mesh = jax.make_mesh((min(batch_size, cpu_count),), ("parallel",))
+        pspec = jax.sharding.PartitionSpec("parallel")
+        sharding = jax.sharding.NamedSharding(mesh, pspec)
+
+        if batch_size > num_parallel:
+            num_pad = (cpu_count - batch_size % cpu_count) % cpu_count
+        else:
+            num_pad = 0
+
+    matrix = matrix.reshape((-1,) + matrix_shape)
+    matrix = jnp.pad(matrix, ((0, num_pad), (0, 0), (0, 0)))
+    matrix = matrix.reshape((num_parallel, -1) + matrix_shape)
+    matrix = jax.device_put(matrix, sharding)
+
+    eigval, eigvec = shard_map.shard_map(
+        lambda x: jax.lax.linalg.eig(x, compute_left_eigenvectors=False),
+        mesh=mesh,
+        in_specs=pspec,
+        out_specs=[pspec, pspec],
+        check_rep=True,
+    )(matrix)
+
+    eigval = eigval.reshape((-1,) + eigval.shape[2:])
+    eigvec = eigvec.reshape((-1,) + eigvec.shape[2:])
+    eigval = eigval[:batch_size]
+    eigvec = eigvec[:batch_size]
+    eigval = eigval.reshape(batch_shape + eigval.shape[1:])
+    eigvec = eigvec.reshape(batch_shape + eigvec.shape[1:])
+    return eigval, eigvec
 
 
 def _eig_magma(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
-    if not _JAX_SUPPORTS_MAGMA:
+    if not _JAX_SUPPORTS_GPU_EIG:
         raise ValueError(
             f"`MAGMA` backend is not available; jax version {jax.__version__} is less "
             f"than minimum 0.4.36."
         )
-    if not _JAX_HAS_MAGMA:
+    if not _TORCH_HAS_MAGMA:
         raise ValueError(
             "`MAGMA` backend is not available; `torch.cuda.has_magma` is `False`."
         )
@@ -211,7 +262,7 @@ def _eig_torch_parallelized(x: torch.Tensor) -> List[Tuple[torch.Tensor, torch.T
 
 
 EIG_FNS = {
-    EigBackend.JAX: _eig_jax,
+    EigBackend.JAX: _eig_jax_multicore,
     EigBackend.MAGMA: _eig_magma,
     EigBackend.NUMPY: _eig_numpy,
     EigBackend.SCIPY: _eig_scipy,
