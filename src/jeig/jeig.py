@@ -68,6 +68,7 @@ def set_backend(backend: str | EigBackend) -> None:
 def eig(
     matrix: jnp.ndarray,
     backend: Optional[str | EigBackend] = None,
+    force_x64: bool = False,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using the specified backend.
 
@@ -78,6 +79,9 @@ def eig(
         matrix: The matrix for which the eigendecomposition is sought. May have
             arbitrary batch dimensions.
         backend: Optional string to specify the backend.
+        force_x64: If `True` and `matrix` has 32-bit precision, it will be cast to
+            64-bit for the eigendecomposition. The eigenvectors and eigenvalues will
+            be cast to 32-bit before returning. Requires 64-bit jax to be enabled.
 
     Returns:
         The eigenvalues and right eigenvectors of the matrix.
@@ -87,36 +91,58 @@ def eig(
             backend = _DEFAULT_BACKEND
         elif not isinstance(backend, EigBackend):
             backend = EigBackend.from_string(backend)
-    return EIG_FNS[backend](matrix)
+    return EIG_FNS[backend](matrix, force_x64)
 
 
-def _eig_jax(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def _eig_jax(matrix: jnp.ndarray, force_x64: bool) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
-    eigenvalues, eigenvectors = jax.lax.linalg.eig(
-        matrix,
+    if force_x64:
+        matrix_dtype = jnp.promote_types(matrix.dtype, jnp.float64)
+    else:
+        matrix_dtype = matrix.dtype
+    output_dtype = jnp.promote_types(matrix, jnp.complex64)
+    eigval, eigvec = jax.lax.linalg.eig(
+        matrix.astype(matrix_dtype),
         compute_left_eigenvectors=False,
         use_magma=False,
     )
-    return eigenvalues, eigenvectors
+    return eigval.astype(output_dtype), eigvec.astype(output_dtype)
 
 
-def _eig_magma(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def _eig_magma(matrix: jnp.ndarray, force_x64: bool) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `jax.numpy.linalg.eig`."""
     if not _JAX_HAS_MAGMA:
         raise ValueError(
             "`MAGMA` backend is not available; `torch.cuda.has_magma` is `False`."
         )
+    if force_x64:
+        matrix_dtype = jnp.promote_types(matrix.dtype, jnp.float64)
+    else:
+        matrix_dtype = matrix.dtype
+    output_dtype = jnp.promote_types(matrix, jnp.complex64)
     eigval, eigvec = jax.lax.linalg.eig(
-        matrix, compute_left_eigenvectors=False, use_magma=True
+        matrix.astype(matrix_dtype),
+        compute_left_eigenvectors=False,
+        use_magma=True,
     )
-    return eigval, eigvec
+    return eigval.astype(output_dtype), eigvec.astype(output_dtype)
 
 
-def _eig_numpy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def _eig_numpy(matrix: jnp.ndarray, force_x64: bool) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `numpy.linalg.eig`."""
+
+    def _numpy_eig_fn(matrix: NDArray) -> Tuple[NDArray, NDArray]:
+        if force_x64:
+            matrix_dtype = onp.promote_types(matrix.dtype, onp.float64)
+        else:
+            matrix_dtype = matrix.dtype
+        output_dtype = onp.promote_types(matrix, onp.complex64)
+        eigval, eigvec = onp.linalg.eig(matrix.astype(matrix_dtype))
+        return eigval.astype(output_dtype), eigvec.astype(output_dtype)
+
     dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
     eigval, eigvec = callback(
-        onp.linalg.eig,
+        _numpy_eig_fn,
         (
             jnp.ones(matrix.shape[:-1], dtype=dtype),  # Eigenvalues
             jnp.ones(matrix.shape, dtype=dtype),  # Eigenvectors
@@ -126,13 +152,22 @@ def _eig_numpy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     return jnp.asarray(eigval), jnp.asarray(eigvec)
 
 
-def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def _eig_scipy(matrix: jnp.ndarray, force_x64: bool) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `scipy.linalg.eig`."""
+
+    def _scipy_eig_fn(matrix: NDArray) -> Tuple[NDArray, NDArray]:
+        if force_x64:
+            matrix_dtype = onp.promote_types(matrix.dtype, onp.float64)
+        else:
+            matrix_dtype = matrix.dtype
+        output_dtype = onp.promote_types(matrix, onp.complex64)
+        eigval, eigvec = scipy.linalg.eig(matrix.astype(matrix_dtype))
+        return eigval.astype(output_dtype), eigvec.astype(output_dtype)
 
     def _eig_fn(m: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
         eigval, eigvec = callback_sequential(
-            scipy.linalg.eig,
+            _scipy_eig_fn,
             (
                 jnp.ones(m.shape[:-1], dtype=dtype),  # Eigenvalues
                 jnp.ones(m.shape, dtype=dtype),  # Eigenvectors
@@ -143,27 +178,34 @@ def _eig_scipy(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
     batch_shape = matrix.shape[:-2]
     matrix = jnp.reshape(matrix, (-1,) + matrix.shape[-2:])
-    eigvals, eigvecs = jax.vmap(_eig_fn)(matrix)
-    eigvecs = jnp.reshape(eigvecs, batch_shape + eigvecs.shape[-2:])
-    eigvals = jnp.reshape(eigvals, batch_shape + eigvals.shape[-1:])
-    return eigvals, eigvecs
+    eigval, eigvec = jax.vmap(_eig_fn)(matrix)
+    eigvec = jnp.reshape(eigvec, batch_shape + eigvec.shape[-2:])
+    eigval = jnp.reshape(eigval, batch_shape + eigval.shape[-1:])
+    return eigval, eigvec
 
 
-def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def _eig_torch(matrix: jnp.ndarray, force_x64: bool) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Eigendecomposition using `torc.linalg.eig`."""
     dtype = jnp.promote_types(matrix.dtype, jnp.complex64)
 
     def _eig_fn(matrix: jnp.ndarray) -> Tuple[NDArray, NDArray]:
+        if force_x64:
+            matrix_dtype = onp.promote_types(matrix.dtype, onp.float64)
+        else:
+            matrix_dtype = matrix.dtype
+        output_dtype = onp.promote_types(matrix, onp.complex64)
         batch_shape = matrix.shape[:-2]
-        matrix_flat = onp.array(matrix).reshape((-1,) + matrix.shape[-2:])
+        matrix_flat = onp.array(matrix, dtype=matrix_dtype).reshape(
+            (-1,) + matrix.shape[-2:]
+        )
         results = _eig_torch_parallelized(torch.as_tensor(matrix_flat))
-        eigvals = onp.asarray([eigval.numpy() for eigval, _ in results], dtype=dtype)
-        eigvecs = onp.asarray([eigvec.numpy() for _, eigvec in results], dtype=dtype)
-        eigvals = eigvals.reshape(batch_shape + (eigvals.shape[-1],))
-        eigvecs = eigvecs.reshape(batch_shape + eigvecs.shape[-2:])
-        return eigvals, eigvecs
+        eigval = onp.asarray([eigval.numpy() for eigval, _ in results], dtype=dtype)
+        eigvec = onp.asarray([eigvec.numpy() for _, eigvec in results], dtype=dtype)
+        eigval = eigval.reshape(batch_shape + (eigval.shape[-1],))
+        eigvec = eigvec.reshape(batch_shape + eigvec.shape[-2:])
+        return eigval.astype(output_dtype), eigvec.astype(output_dtype)
 
-    eigvals, eigvecs = callback(
+    eigval, eigvec = callback(
         _eig_fn,
         (
             jnp.ones(matrix.shape[:-1], dtype=dtype),  # Eigenvalues
@@ -171,7 +213,7 @@ def _eig_torch(matrix: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         ),
         matrix.astype(dtype),
     )
-    return eigvals, eigvecs
+    return eigval, eigvec
 
 
 @torch.jit.script

@@ -117,3 +117,42 @@ class BackendComparisonTest(unittest.TestCase):
         eigvals, eigvecs = jeig.eig(matrix.astype(jnp.complex128), backend=backend)
         self.assertEqual(eigvals.dtype, jnp.complex128)
         self.assertEqual(eigvecs.dtype, jnp.complex128)
+
+
+class ForceX64Test(unittest.TestCase):
+    @parameterized.expand(BACKENDS)
+    def test_force_x64_real(self, backend):
+        matrix = jax.random.normal(
+            jax.random.PRNGKey(0), (3, 2, 10, 10), dtype=jnp.float32
+        )
+        eigvec_force, eigval_force = jeig.eig(matrix, backend, force_x64=True)
+        eigvec_x64, eigval_x64 = jeig.eig(
+            matrix.astype(jnp.float64), backend, force_x64=False
+        )
+
+        self.assertEqual(eigval_force.dtype, jnp.complex64)
+        self.assertEqual(eigvec_force.dtype, jnp.complex64)
+        self.assertEqual(eigval_x64.dtype, jnp.complex128)
+        self.assertEqual(eigvec_x64.dtype, jnp.complex128)
+
+        onp.testing.assert_array_equal(eigvec_force, eigvec_x64.astype(onp.complex64))
+        onp.testing.assert_array_equal(eigval_force, eigval_x64.astype(onp.complex64))
+
+    @parameterized.expand(BACKENDS)
+    def test_force_x64_complex(self, backend):
+        mr, mi = jax.random.normal(
+            jax.random.PRNGKey(0), (2, 3, 2, 10, 10), dtype=jnp.float32
+        )
+        matrix = mr + 1j * mi
+        eigvec_force, eigval_force = jeig.eig(matrix, backend, force_x64=True)
+        eigvec_x64, eigval_x64 = jeig.eig(
+            matrix.astype(jnp.complex128), backend, force_x64=False
+        )
+
+        self.assertEqual(eigval_force.dtype, jnp.complex64)
+        self.assertEqual(eigvec_force.dtype, jnp.complex64)
+        self.assertEqual(eigval_x64.dtype, jnp.complex128)
+        self.assertEqual(eigvec_x64.dtype, jnp.complex128)
+
+        onp.testing.assert_array_equal(eigvec_force, eigvec_x64.astype(onp.complex64))
+        onp.testing.assert_array_equal(eigval_force, eigval_x64.astype(onp.complex64))
