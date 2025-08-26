@@ -1,7 +1,7 @@
 [project]
 
 name = "jeig"
-version = "v0.3.0"
+version = "v0.4.0"
 description = "Various eigendecomposition implementations wrapped for jax."
 keywords = ["jax", "eigendecomposition", "eig", "torch", "scipy", "numpy"]
 readme = "README.md"
